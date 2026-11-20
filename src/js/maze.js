@@ -51,12 +51,19 @@ const MAZE = MAZE_STR.map( ( row ) => row.split( '' ).map( parseTile ) );
 
 const TUNNEL_ROW = 14;
 const PACMAN_START = { x: 13, y: 23 };
+// Un rol por fantasma. El orden define el color en render.js.
 const GHOST_STARTS = [
-  { x: 13, y: 14, kind: 'hunter' }, // dentro de la pen
-  { x: 14, y: 14, kind: 'random' }, // dentro de la pen
+  { x: 12, y: 14, kind: 'chaser' },   // rojo: persigue
+  { x: 13, y: 14, kind: 'ambusher' }, // rosa: se adelanta
+  { x: 14, y: 14, kind: 'flanker' },  // cian: corta el paso
+  { x: 15, y: 14, kind: 'wanderer' }, // naranja: aleatorio
 ];
+
+// Celda fuera de la pen, justo encima de la puerta: destino al salir.
+const PEN_EXIT = { x: 13, y: 11 };
 
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
 window.GHOST_STARTS = GHOST_STARTS;
+window.PEN_EXIT = PEN_EXIT;
