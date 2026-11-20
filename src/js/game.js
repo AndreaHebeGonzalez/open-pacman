@@ -58,7 +58,7 @@ function createGame() {
       speed: GHOST_SPEED,
       kind: start.kind,
       releaseFrames: index * GHOST_RELEASE_FRAMES,
-      leaving: true,
+      phase: 'waiting',
     } ) ),
   };
 }
@@ -257,14 +257,14 @@ function targetFor( game, ghost ) {
 function decideGhost( game, ghost ) {
   // Salir de la pen es una fase propia: la geometria de la caja solo tiene
   // una puerta y la logica de rol se quedaria atrapada dentro.
-  if ( ghost.leaving ) {
+  if ( ghost.phase === 'leaving' ) {
     const atExit =
       Math.round( ghost.x ) === PEN_EXIT.x && Math.round( ghost.y ) === PEN_EXIT.y;
     if ( !atExit ) {
       ghost.dir = chooseDirection( game, ghost, PEN_EXIT );
       return;
     }
-    ghost.leaving = false;
+    ghost.phase = 'roaming';
   }
 
   const target = targetFor( game, ghost );
@@ -306,7 +306,7 @@ function resetPositions( game ) {
     ghost.y = GHOST_STARTS[ index ].y;
     ghost.dir = 'up';
     ghost.releaseFrames = index * GHOST_RELEASE_FRAMES;
-    ghost.leaving = true;
+    ghost.phase = 'waiting';
   } );
 }
 
@@ -327,8 +327,14 @@ function update( game ) {
   updateMode( game );
 
   for ( const ghost of game.ghosts ) {
-    if ( ghost.releaseFrames > 0 ) ghost.releaseFrames--;
-    else moveGhost( game, ghost );
+    if ( ghost.phase === 'waiting' ) {
+      if ( ghost.releaseFrames > 0 ) {
+        ghost.releaseFrames--;
+        continue;
+      }
+      ghost.phase = 'leaving';
+    }
+    moveGhost( game, ghost );
   }
 
   for ( const ghost of game.ghosts ) {
