@@ -1,6 +1,6 @@
 # SPEC 02 — Puerta de tránsito contra fantasmas atrapados en la pen
 
-> **Status:** Approved
+> **Status:** Implementado
 > **Depends on:** SPEC 01
 > **Date:** 2026-11-20
 > **Objective:** Evitar que un fantasma en estado normal vuelva a entrar en la pen, con una puerta de tránsito que la futura spec de power pellets reutilizará para el regreso de los ojos.

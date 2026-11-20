@@ -1,6 +1,6 @@
 # SPEC 01 — Cuatro fantasmas con personalidad propia
 
-> **Status:** Approved
+> **Status:** Implementado
 > **Depends on:** —
 > **Date:** 2026-11-19
 > **Objective:** Dar al juego cuatro fantasmas con comportamiento distinto —persecución por camino más corto, emboscada, flanqueo y deambuleo aleatorio— y fases alternas de dispersión y persecución.
