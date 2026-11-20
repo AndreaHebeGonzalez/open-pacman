@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS, PEN_EXIT.
+// PACMAN_START, GHOST_STARTS, PEN_EXIT, PEN_AREA.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -218,6 +218,14 @@ function chooseDirection( game, ghost, target ) {
   return bestDirection;
 }
 
+// Una celda cae dentro de la pen, puerta incluida?
+function isInsidePenArea( cell ) {
+  return (
+    cell.x >= PEN_AREA.left && cell.x <= PEN_AREA.right &&
+    cell.y >= PEN_AREA.top && cell.y <= PEN_AREA.bottom
+  );
+}
+
 // Mantiene un objetivo dentro de la rejilla.
 function clampToGrid( grid, cell ) {
   const maxX = grid[ 0 ].length - 1;
@@ -257,11 +265,25 @@ function chaseTarget( game, ghost ) {
 // Objetivo segun rol y fase. `wanderer` nunca tiene objetivo.
 function targetFor( game, ghost ) {
   if ( ghost.kind === 'wanderer' ) return null;
-  if ( game.mode === 'scatter' ) return SCATTER_TARGETS[ ghost.kind ] || null;
-  return chaseTarget( game, ghost );
+  const target =
+    game.mode === 'scatter'
+      ? SCATTER_TARGETS[ ghost.kind ] || null
+      : chaseTarget( game, ghost );
+  // La pen es inalcanzable para un fantasma roaming: un objetivo dentro
+  // lo dejaria rondando la puerta.
+  if ( target && isInsidePenArea( target ) ) {
+    return { x: Math.round( game.pacman.x ), y: Math.round( game.pacman.y ) };
+  }
+  return target;
 }
 
 function decideGhost( game, ghost ) {
+  // Guarda: un roaming dentro de la pen solo puede venir de un bug o de un
+  // cambio futuro. Se fuerza la salida en vez de dejarlo atrapado.
+  if ( ghost.phase === 'roaming' && isInsidePenArea( { x: ghost.x, y: ghost.y } ) ) {
+    ghost.phase = 'leaving';
+  }
+
   // Salir de la pen es una fase propia: la geometria de la caja solo tiene
   // una puerta y la logica de rol se quedaria atrapada dentro.
   if ( ghost.phase === 'leaving' ) {
