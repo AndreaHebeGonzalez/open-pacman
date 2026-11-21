@@ -12,6 +12,9 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const FRIGHTENED_SPEED = 0.0625;      // 1/16 celda/frame; con 1/10 comparte retícula 1/80
+const FRIGHTENED_FRAMES = 480;        // 8 s a 60 fps
+const FRIGHTENED_FLASH_FRAMES = 120;  // últimos 2 s: los fantasmas parpadean
 const POWER_PELLET_POINTS = 50;
 const GHOST_RELEASE_FRAMES = 90; // 1,5 s a 60 fps entre salidas de la pen
 const AMBUSH_LEAD = 4;           // celdas por delante que apunta el emboscador
@@ -44,6 +47,8 @@ function createGame() {
     dotsRemaining: dots,
     mode: 'scatter',
     modeFrames: SCATTER_FRAMES,
+    frightenedFrames: 0, // 0 = sin susto; >0 = frames que quedan
+    ghostCombo: 0,
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -109,6 +114,13 @@ function wrapTunnel( a, width ) {
   }
 }
 
+// Activa o reinicia el susto. Un segundo pellet durante el susto reinicia
+// duración y combo, como en el arcade.
+function startFrightened( game ) {
+  game.frightenedFrames = FRIGHTENED_FRAMES;
+  game.ghostCombo = 0;
+}
+
 function movePacman( game ) {
   const p = game.pacman;
   const grid = game.grid;
@@ -129,6 +141,7 @@ function movePacman( game ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += tile === 4 ? POWER_PELLET_POINTS : 10;
       game.dotsRemaining--;
+      if ( tile === 4 ) startFrightened( game );
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -310,6 +323,13 @@ function decideGhost( game, ghost ) {
   ghost.dir = options[ Math.floor( Math.random() * options.length ) ] || ghost.dir;
 }
 
+// Velocidad objetivo segun el susto. moveGhost la aplica al llegar a una
+// celda entera; cambiarla a mitad de celda dejaria al fantasma sin alinear.
+function ghostSpeed( game, ghost ) {
+  if ( game.frightenedFrames > 0 && ghost.phase === 'roaming' ) return FRIGHTENED_SPEED;
+  return GHOST_SPEED;
+}
+
 function moveGhost( game, ghost ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
@@ -317,6 +337,9 @@ function moveGhost( game, ghost ) {
   if ( aligned( ghost.x ) && aligned( ghost.y ) ) {
     ghost.x = Math.round( ghost.x );
     ghost.y = Math.round( ghost.y );
+    // El cambio de velocidad solo se aplica en celda entera: 1/16 y 1/10 no
+    // devuelven a un entero desde cualquier desplazamiento fraccionario.
+    ghost.speed = ghostSpeed( game, ghost );
     decideGhost( game, ghost );
     // Se recalcula despues de decidir: al llegar a PEN_EXIT la fase cambia
     // de 'leaving' a 'roaming' y la puerta deja de ser transitable.
@@ -331,6 +354,9 @@ function moveGhost( game, ghost ) {
 
 function resetPositions( game ) {
   const pacman = game.pacman;
+  // Al perder una vida se apaga el susto; si no, se encadenarían pellets.
+  game.frightenedFrames = 0;
+  game.ghostCombo = 0;
   pacman.x = PACMAN_START.x;
   pacman.y = PACMAN_START.y;
   pacman.dir = 'left';
@@ -339,6 +365,7 @@ function resetPositions( game ) {
     ghost.x = GHOST_STARTS[ index ].x;
     ghost.y = GHOST_STARTS[ index ].y;
     ghost.dir = 'up';
+    ghost.speed = GHOST_SPEED;
     ghost.releaseFrames = index * GHOST_RELEASE_FRAMES;
     ghost.phase = 'waiting';
   } );
@@ -357,8 +384,10 @@ function updateMode( game ) {
 }
 
 function update( game ) {
+  if ( game.frightenedFrames > 0 ) game.frightenedFrames--;
   movePacman( game );
-  updateMode( game );
+  // El reloj de scatter/chase se congela mientras dura el susto.
+  if ( game.frightenedFrames === 0 ) updateMode( game );
 
   for ( const ghost of game.ghosts ) {
     if ( ghost.phase === 'waiting' ) {

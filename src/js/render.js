@@ -101,7 +101,7 @@ function drawPacman( ctx, p, frame ) {
   ctx.fill();
 }
 
-function drawGhost( ctx, g, color ) {
+function drawGhost( ctx, g, color, frightened ) {
   const { cx, cy } = cellCenter( g.x, g.y );
   const r = TILE / 2 - 1;
   const top = cy - r;
@@ -130,6 +130,8 @@ function drawGhost( ctx, g, color ) {
     ctx.beginPath();
     ctx.arc( cx + off, cy - 1, 3, 0, Math.PI * 2 );
     ctx.fill();
+    // Asustado, el ojo va sin pupila: no mira en ninguna direccion.
+    if ( frightened ) continue;
     ctx.fillStyle = '#0000bb';
     ctx.beginPath();
     ctx.arc( cx + off + ex, cy - 1 + ey, 1.5, 0, Math.PI * 2 );
@@ -149,6 +151,17 @@ function drawHUD( ctx, game, W ) {
 
 // Orden alineado con GHOST_STARTS: cazador, emboscador, flanqueador, errante.
 const GHOST_COLORS = [ '#ff0000', '#ffb8ff', '#00ffff', '#ffb852' ];
+const FRIGHTENED_COLOR = '#2121ff';
+const FRIGHTENED_FLASH_COLOR = '#ffffff';
+
+// El susto pinta a todos de azul y alterna a blanco en los ultimos frames
+// para avisar de que se acaba.
+function ghostBodyColor( game, index, frame ) {
+  if ( game.frightenedFrames <= 0 ) return GHOST_COLORS[ index ] || '#ff0000';
+  const flashing = game.frightenedFrames <= FRIGHTENED_FLASH_FRAMES;
+  if ( flashing && Math.floor( frame / 15 ) % 2 === 0 ) return FRIGHTENED_FLASH_COLOR;
+  return FRIGHTENED_COLOR;
+}
 
 function draw( ctx, game, frame ) {
   const grid = game.grid;
@@ -162,7 +175,9 @@ function draw( ctx, game, frame ) {
   drawDoor( ctx, grid );
   drawDots( ctx, grid );
   drawPacman( ctx, game.pacman, frame );
-  game.ghosts.forEach( ( g, i ) => drawGhost( ctx, g, GHOST_COLORS[ i ] || '#ff0000' ) );
+  game.ghosts.forEach( ( g, i ) => {
+    drawGhost( ctx, g, ghostBodyColor( game, i, frame ), game.frightenedFrames > 0 );
+  } );
   drawHUD( ctx, game, W );
 }
 
