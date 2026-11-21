@@ -70,10 +70,13 @@ function drawDots( ctx, grid ) {
   ctx.fillStyle = DOT_COLOR;
   for ( let y = 0; y < grid.length; y++ ) {
     for ( let x = 0; x < grid[ 0 ].length; x++ ) {
-      if ( grid[ y ][ x ] !== 2 ) continue;
+      const tile = grid[ y ][ x ];
+      if ( tile !== 2 && tile !== 4 ) continue;
+      // El power pellet se dibuja mas grande para distinguirlo del dot normal.
+      const radius = tile === 4 ? TILE * 0.3 : 2.5;
       const { cx, cy } = cellCenter( x, y );
       ctx.beginPath();
-      ctx.arc( cx, cy, 2.5, 0, Math.PI * 2 );
+      ctx.arc( cx, cy, radius, 0, Math.PI * 2 );
       ctx.fill();
     }
   }
@@ -98,7 +101,7 @@ function drawPacman( ctx, p, frame ) {
   ctx.fill();
 }
 
-function drawGhost( ctx, g, color ) {
+function drawGhost( ctx, g, color, frightened ) {
   const { cx, cy } = cellCenter( g.x, g.y );
   const r = TILE / 2 - 1;
   const top = cy - r;
@@ -106,17 +109,20 @@ function drawGhost( ctx, g, color ) {
   const left = cx - r;
   const right = cx + r;
 
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc( cx, cy - 1, r, Math.PI, 0, false ); // cabeza
-  ctx.lineTo( right, bottom );
-  // falda ondulada (3 picos)
-  ctx.lineTo( right - r * 0.66, bottom - 4 );
-  ctx.lineTo( cx, bottom );
-  ctx.lineTo( left + r * 0.66, bottom - 4 );
-  ctx.lineTo( left, bottom );
-  ctx.closePath();
-  ctx.fill();
+  // Los ojos comidos vuelven sin cuerpo.
+  if ( g.phase !== 'returning' ) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc( cx, cy - 1, r, Math.PI, 0, false ); // cabeza
+    ctx.lineTo( right, bottom );
+    // falda ondulada (3 picos)
+    ctx.lineTo( right - r * 0.66, bottom - 4 );
+    ctx.lineTo( cx, bottom );
+    ctx.lineTo( left + r * 0.66, bottom - 4 );
+    ctx.lineTo( left, bottom );
+    ctx.closePath();
+    ctx.fill();
+  }
 
   // ojos mirando segun direccion
   const dir = DIRS[ g.dir ] || { x: 0, y: 0 };
@@ -127,6 +133,8 @@ function drawGhost( ctx, g, color ) {
     ctx.beginPath();
     ctx.arc( cx + off, cy - 1, 3, 0, Math.PI * 2 );
     ctx.fill();
+    // Asustado, el ojo va sin pupila: no mira en ninguna direccion.
+    if ( frightened ) continue;
     ctx.fillStyle = '#0000bb';
     ctx.beginPath();
     ctx.arc( cx + off + ex, cy - 1 + ey, 1.5, 0, Math.PI * 2 );
@@ -146,6 +154,17 @@ function drawHUD( ctx, game, W ) {
 
 // Orden alineado con GHOST_STARTS: cazador, emboscador, flanqueador, errante.
 const GHOST_COLORS = [ '#ff0000', '#ffb8ff', '#00ffff', '#ffb852' ];
+const FRIGHTENED_COLOR = '#2121ff';
+const FRIGHTENED_FLASH_COLOR = '#ffffff';
+
+// El susto pinta a todos de azul y alterna a blanco en los ultimos frames
+// para avisar de que se acaba.
+function ghostBodyColor( game, index, frame ) {
+  if ( game.frightenedFrames <= 0 ) return GHOST_COLORS[ index ] || '#ff0000';
+  const flashing = game.frightenedFrames <= FRIGHTENED_FLASH_FRAMES;
+  if ( flashing && Math.floor( frame / 15 ) % 2 === 0 ) return FRIGHTENED_FLASH_COLOR;
+  return FRIGHTENED_COLOR;
+}
 
 function draw( ctx, game, frame ) {
   const grid = game.grid;
@@ -159,7 +178,11 @@ function draw( ctx, game, frame ) {
   drawDoor( ctx, grid );
   drawDots( ctx, grid );
   drawPacman( ctx, game.pacman, frame );
-  game.ghosts.forEach( ( g, i ) => drawGhost( ctx, g, GHOST_COLORS[ i ] || '#ff0000' ) );
+  game.ghosts.forEach( ( g, i ) => {
+    const returning = g.phase === 'returning';
+    const frightened = game.frightenedFrames > 0 && !returning;
+    drawGhost( ctx, g, ghostBodyColor( game, i, frame ), frightened );
+  } );
   drawHUD( ctx, game, W );
 }
 
