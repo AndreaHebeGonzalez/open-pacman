@@ -109,17 +109,20 @@ function drawGhost( ctx, g, color, frightened ) {
   const left = cx - r;
   const right = cx + r;
 
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc( cx, cy - 1, r, Math.PI, 0, false ); // cabeza
-  ctx.lineTo( right, bottom );
-  // falda ondulada (3 picos)
-  ctx.lineTo( right - r * 0.66, bottom - 4 );
-  ctx.lineTo( cx, bottom );
-  ctx.lineTo( left + r * 0.66, bottom - 4 );
-  ctx.lineTo( left, bottom );
-  ctx.closePath();
-  ctx.fill();
+  // Los ojos comidos vuelven sin cuerpo.
+  if ( g.phase !== 'returning' ) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc( cx, cy - 1, r, Math.PI, 0, false ); // cabeza
+    ctx.lineTo( right, bottom );
+    // falda ondulada (3 picos)
+    ctx.lineTo( right - r * 0.66, bottom - 4 );
+    ctx.lineTo( cx, bottom );
+    ctx.lineTo( left + r * 0.66, bottom - 4 );
+    ctx.lineTo( left, bottom );
+    ctx.closePath();
+    ctx.fill();
+  }
 
   // ojos mirando segun direccion
   const dir = DIRS[ g.dir ] || { x: 0, y: 0 };
@@ -176,7 +179,9 @@ function draw( ctx, game, frame ) {
   drawDots( ctx, grid );
   drawPacman( ctx, game.pacman, frame );
   game.ghosts.forEach( ( g, i ) => {
-    drawGhost( ctx, g, ghostBodyColor( game, i, frame ), game.frightenedFrames > 0 );
+    const returning = g.phase === 'returning';
+    const frightened = game.frightenedFrames > 0 && !returning;
+    drawGhost( ctx, g, ghostBodyColor( game, i, frame ), frightened );
   } );
   drawHUD( ctx, game, W );
 }

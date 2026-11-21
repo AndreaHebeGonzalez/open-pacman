@@ -64,6 +64,8 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: start.kind,
+      // Celda de origen a la que vuelven los ojos comidos.
+      home: { x: start.x, y: start.y },
       releaseFrames: index * GHOST_RELEASE_FRAMES,
       phase: 'waiting',
     } ) ),
@@ -189,10 +191,10 @@ function forwardDirections( grid, cellX, cellY, facing, actor ) {
   return forward.length ? forward : open;
 }
 
-// Actor para isWall: solo el fantasma en transito (leaving y, en la futura
-// spec de power pellets, returning) puede cruzar la puerta de la pen.
+// Actor para isWall: solo el fantasma en transito (leaving y returning) puede
+// cruzar la puerta de la pen.
 function ghostActor( ghost ) {
-  return ghost.phase === 'leaving' ? 'penGhost' : 'ghost';
+  return ghost.phase === 'leaving' || ghost.phase === 'returning' ? 'penGhost' : 'ghost';
 }
 
 // Elige la direccion que acerca a target. Con BFS se permite el giro de 180
@@ -301,6 +303,17 @@ function randomDirection( game, ghost ) {
 }
 
 function decideGhost( game, ghost ) {
+  // Ojos comidos: vuelven a su celda de origen y desde alli salen de nuevo.
+  if ( ghost.phase === 'returning' ) {
+    const atHome =
+      Math.round( ghost.x ) === ghost.home.x && Math.round( ghost.y ) === ghost.home.y;
+    if ( !atHome ) {
+      ghost.dir = chooseDirection( game, ghost, ghost.home );
+      return;
+    }
+    ghost.phase = 'leaving';
+  }
+
   // Guarda: un roaming dentro de la pen solo puede venir de un bug o de un
   // cambio futuro. Se fuerza la salida en vez de dejarlo atrapado.
   if ( ghost.phase === 'roaming' && isInsidePenArea( { x: ghost.x, y: ghost.y } ) ) {
@@ -413,15 +426,20 @@ function update( game ) {
   }
 
   for ( const ghost of game.ghosts ) {
-    if ( collides( game.pacman, ghost ) ) {
-      game.lives--;
-      if ( game.lives <= 0 ) {
-        game.state = 'lost';
-        return;
-      }
-      resetPositions( game );
-      break;
+    if ( !collides( game.pacman, ghost ) ) continue;
+    // Los ojos vuelven a la pen: no se pueden comer ni matan.
+    if ( ghost.phase === 'returning' ) continue;
+    if ( game.frightenedFrames > 0 ) {
+      ghost.phase = 'returning';
+      continue;
     }
+    game.lives--;
+    if ( game.lives <= 0 ) {
+      game.state = 'lost';
+      return;
+    }
+    resetPositions( game );
+    break;
   }
 
   if ( game.dotsRemaining <= 0 ) game.state = 'won';
