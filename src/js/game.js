@@ -16,6 +16,7 @@ const FRIGHTENED_SPEED = 0.0625;      // 1/16 celda/frame; con 1/10 comparte ret
 const FRIGHTENED_FRAMES = 480;        // 8 s a 60 fps
 const FRIGHTENED_FLASH_FRAMES = 120;  // últimos 2 s: los fantasmas parpadean
 const POWER_PELLET_POINTS = 50;
+const GHOST_EAT_SCORES = [ 200, 400, 800, 1600 ];
 const GHOST_RELEASE_FRAMES = 90; // 1,5 s a 60 fps entre salidas de la pen
 const AMBUSH_LEAD = 4;           // celdas por delante que apunta el emboscador
 const SCATTER_FRAMES = 420;      // 7 s a 60 fps dispersando
@@ -430,6 +431,10 @@ function update( game ) {
     // Los ojos vuelven a la pen: no se pueden comer ni matan.
     if ( ghost.phase === 'returning' ) continue;
     if ( game.frightenedFrames > 0 ) {
+      // Combo creciente dentro del mismo susto, con tope en el último valor.
+      const scoreIndex = Math.min( game.ghostCombo, GHOST_EAT_SCORES.length - 1 );
+      game.score += GHOST_EAT_SCORES[ scoreIndex ];
+      game.ghostCombo++;
       ghost.phase = 'returning';
       continue;
     }
