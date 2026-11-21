@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS, PEN_EXIT.
+// PACMAN_START, GHOST_STARTS, PEN_EXIT, PEN_AREA.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -58,7 +58,7 @@ function createGame() {
       speed: GHOST_SPEED,
       kind: start.kind,
       releaseFrames: index * GHOST_RELEASE_FRAMES,
-      leaving: true,
+      phase: 'waiting',
     } ) ),
   };
 }
@@ -68,14 +68,14 @@ function aligned( v ) {
 }
 
 // Una celda es muro para el actor dado?
-//   pacman: bloqueado por pared (1) y puerta (3)
-//   ghost:  bloqueado solo por pared (1)
+//   pacman / ghost: bloqueados por pared (1) y puerta (3)
+//   penGhost: fantasma que sale de la pen; ademas cruza la puerta (3)
 function isWall( grid, x, y, actor ) {
   if ( y < 0 || y >= grid.length ) return true;
   if ( x < 0 || x >= grid[ 0 ].length ) return true;
   const v = grid[ y ][ x ];
   if ( v === 1 ) return true;
-  if ( v === 3 && actor === 'pacman' ) return true;
+  if ( v === 3 ) return actor !== 'penGhost';
   return false;
 }
 
@@ -165,26 +165,33 @@ function bfsDistances( grid, target, actor ) {
 }
 
 // Direcciones abiertas sin la vuelta atras. En un callejon se permite.
-function forwardDirections( grid, cellX, cellY, facing ) {
+function forwardDirections( grid, cellX, cellY, facing, actor ) {
   const open = Object.keys( DIRS ).filter(
-    ( direction ) => canMove( grid, cellX, cellY, direction, 'ghost' )
+    ( direction ) => canMove( grid, cellX, cellY, direction, actor )
   );
   const forward = open.filter( ( direction ) => direction !== OPPOSITE[ facing ] );
   return forward.length ? forward : open;
+}
+
+// Actor para isWall: solo el fantasma en transito (leaving y, en la futura
+// spec de power pellets, returning) puede cruzar la puerta de la pen.
+function ghostActor( ghost ) {
+  return ghost.phase === 'leaving' ? 'penGhost' : 'ghost';
 }
 
 // Elige la direccion que acerca a target. Con BFS se permite el giro de 180
 // porque la distancia siempre decrece; el greedy conserva la regla de no girar.
 function chooseDirection( game, ghost, target ) {
   const grid = game.grid;
-  const distances = bfsDistances( grid, target, 'ghost' );
+  const actor = ghostActor( ghost );
+  const distances = bfsDistances( grid, target, actor );
   const ghostDistance = distances.get( cellKey( ghost.x, ghost.y ) );
 
   if ( ghostDistance !== undefined ) {
     let bestDirection = ghost.dir;
     let bestDistance = ghostDistance;
     for ( const direction of Object.keys( DIRS ) ) {
-      const neighbour = nextCell( grid, ghost.x, ghost.y, direction, 'ghost' );
+      const neighbour = nextCell( grid, ghost.x, ghost.y, direction, actor );
       if ( !neighbour ) continue;
       const neighbourDistance = distances.get( cellKey( neighbour.x, neighbour.y ) );
       if ( neighbourDistance !== undefined && neighbourDistance < bestDistance ) {
@@ -196,11 +203,11 @@ function chooseDirection( game, ghost, target ) {
   }
 
   // Objetivo en pared o inalcanzable: aproximacion por distancia Manhattan.
-  const options = forwardDirections( grid, ghost.x, ghost.y, ghost.dir );
+  const options = forwardDirections( grid, ghost.x, ghost.y, ghost.dir, actor );
   let bestDirection = options[ 0 ] || ghost.dir;
   let bestDistance = Infinity;
   for ( const direction of options ) {
-    const neighbour = nextCell( grid, ghost.x, ghost.y, direction, 'ghost' );
+    const neighbour = nextCell( grid, ghost.x, ghost.y, direction, actor );
     if ( !neighbour ) continue;
     const manhattan = Math.abs( neighbour.x - target.x ) + Math.abs( neighbour.y - target.y );
     if ( manhattan < bestDistance ) {
@@ -209,6 +216,14 @@ function chooseDirection( game, ghost, target ) {
     }
   }
   return bestDirection;
+}
+
+// Una celda cae dentro de la pen, puerta incluida?
+function isInsidePenArea( cell ) {
+  return (
+    cell.x >= PEN_AREA.left && cell.x <= PEN_AREA.right &&
+    cell.y >= PEN_AREA.top && cell.y <= PEN_AREA.bottom
+  );
 }
 
 // Mantiene un objetivo dentro de la rejilla.
@@ -250,21 +265,35 @@ function chaseTarget( game, ghost ) {
 // Objetivo segun rol y fase. `wanderer` nunca tiene objetivo.
 function targetFor( game, ghost ) {
   if ( ghost.kind === 'wanderer' ) return null;
-  if ( game.mode === 'scatter' ) return SCATTER_TARGETS[ ghost.kind ] || null;
-  return chaseTarget( game, ghost );
+  const target =
+    game.mode === 'scatter'
+      ? SCATTER_TARGETS[ ghost.kind ] || null
+      : chaseTarget( game, ghost );
+  // La pen es inalcanzable para un fantasma roaming: un objetivo dentro
+  // lo dejaria rondando la puerta.
+  if ( target && isInsidePenArea( target ) ) {
+    return { x: Math.round( game.pacman.x ), y: Math.round( game.pacman.y ) };
+  }
+  return target;
 }
 
 function decideGhost( game, ghost ) {
+  // Guarda: un roaming dentro de la pen solo puede venir de un bug o de un
+  // cambio futuro. Se fuerza la salida en vez de dejarlo atrapado.
+  if ( ghost.phase === 'roaming' && isInsidePenArea( { x: ghost.x, y: ghost.y } ) ) {
+    ghost.phase = 'leaving';
+  }
+
   // Salir de la pen es una fase propia: la geometria de la caja solo tiene
   // una puerta y la logica de rol se quedaria atrapada dentro.
-  if ( ghost.leaving ) {
+  if ( ghost.phase === 'leaving' ) {
     const atExit =
       Math.round( ghost.x ) === PEN_EXIT.x && Math.round( ghost.y ) === PEN_EXIT.y;
     if ( !atExit ) {
       ghost.dir = chooseDirection( game, ghost, PEN_EXIT );
       return;
     }
-    ghost.leaving = false;
+    ghost.phase = 'roaming';
   }
 
   const target = targetFor( game, ghost );
@@ -274,7 +303,7 @@ function decideGhost( game, ghost ) {
   }
 
   // El errante deambula al azar en ambas fases.
-  const options = forwardDirections( game.grid, ghost.x, ghost.y, ghost.dir );
+  const options = forwardDirections( game.grid, ghost.x, ghost.y, ghost.dir, ghostActor( ghost ) );
   ghost.dir = options[ Math.floor( Math.random() * options.length ) ] || ghost.dir;
 }
 
@@ -286,7 +315,9 @@ function moveGhost( game, ghost ) {
     ghost.x = Math.round( ghost.x );
     ghost.y = Math.round( ghost.y );
     decideGhost( game, ghost );
-    if ( !canMove( grid, ghost.x, ghost.y, ghost.dir, 'ghost' ) ) return;
+    // Se recalcula despues de decidir: al llegar a PEN_EXIT la fase cambia
+    // de 'leaving' a 'roaming' y la puerta deja de ser transitable.
+    if ( !canMove( grid, ghost.x, ghost.y, ghost.dir, ghostActor( ghost ) ) ) return;
   }
 
   const step = DIRS[ ghost.dir ];
@@ -306,7 +337,7 @@ function resetPositions( game ) {
     ghost.y = GHOST_STARTS[ index ].y;
     ghost.dir = 'up';
     ghost.releaseFrames = index * GHOST_RELEASE_FRAMES;
-    ghost.leaving = true;
+    ghost.phase = 'waiting';
   } );
 }
 
@@ -327,8 +358,14 @@ function update( game ) {
   updateMode( game );
 
   for ( const ghost of game.ghosts ) {
-    if ( ghost.releaseFrames > 0 ) ghost.releaseFrames--;
-    else moveGhost( game, ghost );
+    if ( ghost.phase === 'waiting' ) {
+      if ( ghost.releaseFrames > 0 ) {
+        ghost.releaseFrames--;
+        continue;
+      }
+      ghost.phase = 'leaving';
+    }
+    moveGhost( game, ghost );
   }
 
   for ( const ghost of game.ghosts ) {

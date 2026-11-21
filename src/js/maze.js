@@ -62,8 +62,13 @@ const GHOST_STARTS = [
 // Celda fuera de la pen, justo encima de la puerta: destino al salir.
 const PEN_EXIT = { x: 13, y: 11 };
 
+// Zona de la pen, puerta incluida. La fila 12 entra en el area para que
+// game.js tambien descarte objetivos situados sobre la puerta.
+const PEN_AREA = { left: 11, right: 16, top: 12, bottom: 15 };
+
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
 window.GHOST_STARTS = GHOST_STARTS;
 window.PEN_EXIT = PEN_EXIT;
+window.PEN_AREA = PEN_AREA;
