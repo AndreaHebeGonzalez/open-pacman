@@ -293,11 +293,24 @@ function targetFor( game, ghost ) {
   return target;
 }
 
+// Direccion legal al azar, sin volver atras. La comparten el errante y el
+// fantasma asustado.
+function randomDirection( game, ghost ) {
+  const options = forwardDirections( game.grid, ghost.x, ghost.y, ghost.dir, ghostActor( ghost ) );
+  return options[ Math.floor( Math.random() * options.length ) ] || ghost.dir;
+}
+
 function decideGhost( game, ghost ) {
   // Guarda: un roaming dentro de la pen solo puede venir de un bug o de un
   // cambio futuro. Se fuerza la salida en vez de dejarlo atrapado.
   if ( ghost.phase === 'roaming' && isInsidePenArea( { x: ghost.x, y: ghost.y } ) ) {
     ghost.phase = 'leaving';
+  }
+
+  // Asustado deambula al azar en cada celda, como en el arcade.
+  if ( ghost.phase === 'roaming' && game.frightenedFrames > 0 ) {
+    ghost.dir = randomDirection( game, ghost );
+    return;
   }
 
   // Salir de la pen es una fase propia: la geometria de la caja solo tiene
@@ -319,8 +332,7 @@ function decideGhost( game, ghost ) {
   }
 
   // El errante deambula al azar en ambas fases.
-  const options = forwardDirections( game.grid, ghost.x, ghost.y, ghost.dir, ghostActor( ghost ) );
-  ghost.dir = options[ Math.floor( Math.random() * options.length ) ] || ghost.dir;
+  ghost.dir = randomDirection( game, ghost );
 }
 
 // Velocidad objetivo segun el susto. moveGhost la aplica al llegar a una
